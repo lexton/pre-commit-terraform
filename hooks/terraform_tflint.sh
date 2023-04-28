@@ -50,16 +50,29 @@ function per_dir_hook_unique_part {
   shift
   local -a -r args=("$@")
 
-  # Print checked PATH **only** if TFLint have any messages
-  # shellcheck disable=SC2091,SC2068 # Suppress error output
-  $(tflint ${args[@]} 2>&1) 2> /dev/null || {
-    common::colorify "yellow" "TFLint in $dir_path/:"
+  IFS=";" read -r -a configs <<< "${HOOK_CONFIG[*]}"
+  for c in "${configs[@]}"; do
+    IFS="=" read -r -a config <<< "$c"
+    key=${config[0]}
+    value=${config[1]}
 
-    tflint "${args[@]}"
-  }
+    case $key in
+      --skip-chdir)
+        if [ "$value" != "false" ]; then
+          DIR_ARGS="--chdir=$dir_path"
+        fi
+        ;;
+    esac
+  done
 
-  # return exit code to common::per_dir_hook
+  COMMAND_OUTPUT=$({ tflint "${DIR_ARGS}" "${args[@]}"; } 2>&1)
   local exit_code=$?
+
+  if [ $exit_code -ne 0 ]; then
+    common::colorify "yellow" "TFLint in $dir_path/:"
+    echo "$COMMAND_OUTPUT"
+  fi
+
   return $exit_code
 }
 
